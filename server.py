@@ -25,6 +25,9 @@ async def is_prime(number):
     натуральных делителя - единицу и самого себя.
 
     """
+    if number < 2:
+        return False
+
     if number in primes_set:
         return True
 
@@ -51,8 +54,9 @@ async def is_prime(number):
 async def get_prime_factors(number):
     """
     Разложение числа на простые множители.
-    Используется простой алгоритм перебора с оптимизациями. При этом перед тем,
-    как начать вычисления, проверяется, не является ли переданное число простым.
+    Используется простой алгоритм перебора с оптимизациями. При этом перед
+    тем, как начать вычисления, проверяется, не является ли переданное число
+    простым.
 
     """
     res = results.get(number, [number] if await is_prime(number) else [])
@@ -112,7 +116,7 @@ async def handle(reader, writer):
     """
     Асинхронный обработчик соединений.
 
-    Работает с запросами в объеме, достаточном для демонстрации. 
+    Работает с запросами в объеме, достаточном для демонстрации.
 
     """
     first_line = True
@@ -152,7 +156,7 @@ async def handle(reader, writer):
     response = {'id': id, 'number': number}
     try:
         number = int(number)
-        assert number > 1
+        assert number > 0
     except:
         response.update({'res': 'Введите целое число большее 0'})
     else:
@@ -174,7 +178,8 @@ if __name__ == '__main__':
     loop = asyncio.get_event_loop()
     server_gen = asyncio.start_server(handle, port=8081)
     server = loop.run_until_complete(server_gen)
-    logging.info('Server started: {0}'.format(server.sockets[0].getsockname()))
+    print('Starting Python Asynchronous Server Demo at http://{}'
+          .format(':'.join(map(str, server.sockets[0].getsockname()))))
     try:
         loop.run_forever()
     except KeyboardInterrupt:
