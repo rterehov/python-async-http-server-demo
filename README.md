@@ -1,5 +1,6 @@
 # Пример простого асинхронного http-сервера на python3.5 и asyncio
 
+[![Build Status](https://travis-ci.org/rterehov/python-async-http-server-demo.svg?branch=master)](https://travis-ci.org/rterehov/python-async-http-server-demo)
 
 ## Сценарий работы
 
