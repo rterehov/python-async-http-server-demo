@@ -28,17 +28,21 @@ async def is_prime(number):
     if number in primes_set:
         return True
 
-    # Четные, кроме числа 2, проверять смысла нет.
+    # Четные числа все непростые.
     if number % 2 == 0:
         return False
 
-    max_ = sqrt(number) + 1
-    curr = 3
-    while curr < max_:
+    # Двигаемся по нечетным числам, т.к. четные все непростые.
+    i = 0
+    for curr in range(3, int(sqrt(number)) + 1, 2):
         if number % curr == 0:
             return False
-        curr += 2 # двигаемся по нечетным
-        await asyncio.sleep(0.00000001)
+
+        # даем другим сопрограммам возможность выполниться
+        i += 1
+        if i > 100:
+            await asyncio.sleep(0.00000001)
+            i = 1
 
     primes_set.add(number)
     return True
@@ -51,19 +55,17 @@ async def get_prime_factors(number):
     как начать вычисления, проверяется, не является ли переданное число простым.
 
     """
-
     res = results.get(number, [number] if await is_prime(number) else [])
     if not res:
         i = 1
         tmp = number
         while i < tmp:
             i += 1
-            if is_prime(i) and tmp % i == 0:
+            if await is_prime(i) and tmp % i == 0:
                 tmp /= i
                 res.append(i)
-                logging.debug('{}: {} {}'.format(number, i, int(tmp)))
+                logging.info('{}: {} {}'.format(number, i, int(tmp)))
                 i = 1
-            await asyncio.sleep(0.00000001)
     results[number] = res
     return res
 
@@ -106,8 +108,7 @@ def static_serve(path, writer):
     return
 
 
-@asyncio.coroutine
-def handle(reader, writer):
+async def handle(reader, writer):
     """
     Асинхронный обработчик соединений.
 
@@ -117,28 +118,29 @@ def handle(reader, writer):
     first_line = True
     content_length = 0
     curr_func, args = reader.readline, ()
+
     while not reader.at_eof():
         try:
-            data = yield from asyncio.wait_for(curr_func(*args), timeout=5)
+            data = await asyncio.wait_for(curr_func(*args), timeout=0.3)
+            if not data:
+                reader.feed_eof()
+                continue
+
             line = data.decode()
-
-            if not line:
-                break
-
             if first_line:
                 first_line = False
-                method, path, version = line.split()
-                path = 'index.html' if path == '/' else path
+                method, path, _ = line.split()
                 if method == 'GET':
+                    path = 'index.html' if path == '/' else path
                     return static_serve(path, writer)
 
             if curr_func == reader.read:
                 number, id = map(lambda x: x.split('=')[-1], line.split('&'))
-                number = int(number)
-                logging.debug(line)
-                break
+                logging.info(line)
+                reader.feed_eof()
+                continue
 
-            if 'Content-Length' in line:
+            if line.startswith('Content-Length'):
                 content_length = int(line.split(':')[-1].strip())
             elif line == '\r\n':
                 curr_func, args = reader.read, (content_length,)
@@ -147,24 +149,28 @@ def handle(reader, writer):
             logging.warning('TIMEOUT!!!')
             break
 
-    res = yield from get_prime_factors(number)
-    res = json.dumps({
-        'id': id,
-        'number': number,
-        'res':  ' * '.join(map(str, res)),
-    })
+    response = {'id': id, 'number': number}
+    try:
+        number = int(number)
+        assert number > 1
+    except:
+        response.update({'res': 'Введите целое число большее 0'})
+    else:
+        res = await get_prime_factors(number)
+        response.update({'res':  ' * '.join(map(str, res))})
+
     query = (
         'HTTP/1.1 200 OK\r\n'
         'Content-type: text/json\r\n'
         '\r\n'
     ).encode('utf-8')
     writer.write(query)
-    writer.write(bytes(res, "utf8"))
+    writer.write(bytes(json.dumps(response), "utf8"))
     writer.close()
 
 
 if __name__ == '__main__':
-    logging.basicConfig(level=logging.DEBUG)
+    logging.basicConfig(level=logging.INFO)
     loop = asyncio.get_event_loop()
     server_gen = asyncio.start_server(handle, port=8081)
     server = loop.run_until_complete(server_gen)
