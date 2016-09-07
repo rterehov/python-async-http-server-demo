@@ -58,13 +58,11 @@ async def get_prime_factors(number):
         tmp = number
         while i < tmp:
             i += 1
-            p = is_prime(i)
-            if p:
-                if tmp % i == 0:
-                    tmp /= i
-                    res.append(i)
-                    logging.debug('{}: {} {}'.format(number, i, int(tmp)))
-                    i = 1
+            if is_prime(i) and tmp % i == 0:
+                tmp /= i
+                res.append(i)
+                logging.debug('{}: {} {}'.format(number, i, int(tmp)))
+                i = 1
             await asyncio.sleep(0.00000001)
     results[number] = res
     return res
