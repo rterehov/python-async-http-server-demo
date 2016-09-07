@@ -1,0 +1,29 @@
+<html>
+<body>
+    <h1>Разложение числа на простые множители</h1>
+    <h2>Введите число</h2>
+    <input id=number name=number>
+    <input type='button' class='btn-ajax-send' value='Разложить'>
+    <h2>Результаты</h2>
+    <div id=res></div>
+    <br>
+    <div><input type='button' value='Очистить' onClick="$('#res').html('');"></div>
+</body>
+<script src="/jquery-3.1.0.min.js" type="text/javascript" charset="utf-8"></script>
+<script>
+    $(document).ready(function() {
+        $('body').on('click', '.btn-ajax-send', function() {
+            var number = $('#number')[0].value;
+            var id = Math.round(Math.random() * (1000000000 - 1000000) + 1000000);
+            $("#res").append("<div>" + number + " = <span id='res-"+ number + '-' + id +"'>ждите...</span></div>");
+            $.ajax({
+                type: 'POST',
+                url: 'http://127.0.0.1:8081/post',
+                data: "number=" + number + "&id=" + id,
+            }).done(function(data){
+                $("#res-" + data.number + '-' + data.id).html(data.res);
+            })
+        });
+    });
+</script>
+</html>
