@@ -20,3 +20,11 @@
 cd python-async-http-server-demo
 python server.py
 ```
+
+## Тесты
+
+```shell
+cd python-async-http-server-demo
+pytest --cov=server.py
+```
+
