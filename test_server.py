@@ -67,7 +67,7 @@ async def helper(func, iterator, checker):
 
 
 class TestCase:
-    def setup_method(self):
+    def setup_method(self, *args, **kwargs):
         """
         Для каждого теста создаем свой независимый event_loop
 
@@ -75,7 +75,7 @@ class TestCase:
         self.loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self.loop)
 
-    def teardown_method(self):
+    def teardown_method(self, *args, **kwargs):
         self.loop.close()
 
     def test__is_prime(self):
