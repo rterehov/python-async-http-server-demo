@@ -12,66 +12,61 @@ import concurrent.futures
 # Кешируем уже вычисленные простые числа.
 # Предзаполнение двойкой позволяет использовать на 1 проверку меньше при
 # вычислении.
-last_known_prime = 2
-primes_set = set([last_known_prime])
+primes_set = set([2])
 
 # Кешируем результаты.
 results = dict()
 
 
+async def is_prime(number):
+    """
+    Проверка, является ли число простым.
+    Простое число - натуральное число, имеющее ровно два различных
+    натуральных делителя - единицу и самого себя.
+
+    """
+    if number in primes_set:
+        return True
+
+    # Четные, кроме числа 2, проверять смысла нет.
+    if number % 2 == 0:
+        return False
+
+    max_ = sqrt(number) + 1
+    curr = 3
+    while curr < max_:
+        if number % curr == 0:
+            return False
+        curr += 2 # двигаемся по нечетным
+        await asyncio.sleep(0.00000001)
+
+    primes_set.add(number)
+    return True
+
+
 async def get_prime_factors(number):
     """
     Разложение числа на простые множители.
-    Используется простой алгоритм перебора с оптимизациями.
+    Используется простой алгоритм перебора с оптимизациями. При этом перед тем,
+    как начать вычисления, проверяется, не является ли переданное число простым.
 
     """
-        
-    async def is_prime(number):
-        """
-        Проверка, является ли число простым.
-        Простое число - натуральное число, имеющее ровно два различных
-        натуральных делителя - единицу и самого себя.
-    
-        """
-        global last_known_prime
 
-        if number in primes_set:
-            return True
-
-        if number < last_known_prime:
-            return False
-
-        # Четные, кроме числа 2, проверять смысла нет. А 2 мы уже учли.
-        if number % 2 == 0:
-            return False
-
-        max_ = sqrt(number) + 1
-        curr = 3
-        while curr < max_:
-            if number % curr == 0:
-                return False
-            curr += 2 # двигаемся по нечетным
-        return True
-
-    number = int(number)
-    res = results.get(number, [])
+    res = results.get(number, [number] if await is_prime(number) else [])
     if not res:
         i = 1
         tmp = number
         while i < tmp:
             i += 1
-            p = await is_prime(i)
+            p = is_prime(i)
             if p:
-                if not i in primes_set:
-                    primes_set.add(i)
-                    last_known_prime = i
                 if tmp % i == 0:
                     tmp /= i
                     res.append(i)
                     logging.debug('{}: {} {}'.format(number, i, int(tmp)))
                     i = 1
-            await asyncio.sleep(0.000001)
-        results[number] = res
+            await asyncio.sleep(0.00000001)
+    results[number] = res
     return res
 
 
@@ -141,6 +136,7 @@ def handle(reader, writer):
 
             if curr_func == reader.read:
                 number, id = map(lambda x: x.split('=')[-1], line.split('&'))
+                number = int(number)
                 logging.debug(line)
                 break
 
