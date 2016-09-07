@@ -12,66 +12,61 @@ import concurrent.futures
 # Кешируем уже вычисленные простые числа.
 # Предзаполнение двойкой позволяет использовать на 1 проверку меньше при
 # вычислении.
-last_known_prime = 2
-primes_set = set([last_known_prime])
+primes_set = set([2])
 
 # Кешируем результаты.
 results = dict()
 
 
+async def is_prime(number):
+    """
+    Проверка, является ли число простым.
+    Простое число - натуральное число, имеющее ровно два различных
+    натуральных делителя - единицу и самого себя.
+
+    """
+    if number in primes_set:
+        return True
+
+    # Четные числа все непростые.
+    if number % 2 == 0:
+        return False
+
+    # Двигаемся по нечетным числам, т.к. четные все непростые.
+    i = 0
+    for curr in range(3, int(sqrt(number)) + 1, 2):
+        if number % curr == 0:
+            return False
+
+        # даем другим сопрограммам возможность выполниться
+        i += 1
+        if i > 100:
+            await asyncio.sleep(0.00000001)
+            i = 1
+
+    primes_set.add(number)
+    return True
+
+
 async def get_prime_factors(number):
     """
     Разложение числа на простые множители.
-    Используется простой алгоритм перебора с оптимизациями.
+    Используется простой алгоритм перебора с оптимизациями. При этом перед тем,
+    как начать вычисления, проверяется, не является ли переданное число простым.
 
     """
-        
-    async def is_prime(number):
-        """
-        Проверка, является ли число простым.
-        Простое число - натуральное число, имеющее ровно два различных
-        натуральных делителя - единицу и самого себя.
-    
-        """
-        global last_known_prime
-
-        if number in primes_set:
-            return True
-
-        if number < last_known_prime:
-            return False
-
-        # Четные, кроме числа 2, проверять смысла нет. А 2 мы уже учли.
-        if number % 2 == 0:
-            return False
-
-        max_ = sqrt(number) + 1
-        curr = 3
-        while curr < max_:
-            if number % curr == 0:
-                return False
-            curr += 2 # двигаемся по нечетным
-        return True
-
-    number = int(number)
-    res = results.get(number, [])
+    res = results.get(number, [number] if await is_prime(number) else [])
     if not res:
         i = 1
         tmp = number
         while i < tmp:
             i += 1
-            p = await is_prime(i)
-            if p:
-                if not i in primes_set:
-                    primes_set.add(i)
-                    last_known_prime = i
-                if tmp % i == 0:
-                    tmp /= i
-                    res.append(i)
-                    logging.debug('{}: {} {}'.format(number, i, int(tmp)))
-                    i = 1
-            await asyncio.sleep(0.000001)
-        results[number] = res
+            if await is_prime(i) and tmp % i == 0:
+                tmp /= i
+                res.append(i)
+                logging.info('{}: {} {}'.format(number, i, int(tmp)))
+                i = 1
+    results[number] = res
     return res
 
 
@@ -113,8 +108,7 @@ def static_serve(path, writer):
     return
 
 
-@asyncio.coroutine
-def handle(reader, writer):
+async def handle(reader, writer):
     """
     Асинхронный обработчик соединений.
 
@@ -124,27 +118,29 @@ def handle(reader, writer):
     first_line = True
     content_length = 0
     curr_func, args = reader.readline, ()
+
     while not reader.at_eof():
         try:
-            data = yield from asyncio.wait_for(curr_func(*args), timeout=5)
+            data = await asyncio.wait_for(curr_func(*args), timeout=0.3)
+            if not data:
+                reader.feed_eof()
+                continue
+
             line = data.decode()
-
-            if not line:
-                break
-
             if first_line:
                 first_line = False
-                method, path, version = line.split()
-                path = 'index.html' if path == '/' else path
+                method, path, _ = line.split()
                 if method == 'GET':
+                    path = 'index.html' if path == '/' else path
                     return static_serve(path, writer)
 
             if curr_func == reader.read:
                 number, id = map(lambda x: x.split('=')[-1], line.split('&'))
-                logging.debug(line)
-                break
+                logging.info(line)
+                reader.feed_eof()
+                continue
 
-            if 'Content-Length' in line:
+            if line.startswith('Content-Length'):
                 content_length = int(line.split(':')[-1].strip())
             elif line == '\r\n':
                 curr_func, args = reader.read, (content_length,)
@@ -153,24 +149,28 @@ def handle(reader, writer):
             logging.warning('TIMEOUT!!!')
             break
 
-    res = yield from get_prime_factors(number)
-    res = json.dumps({
-        'id': id,
-        'number': number,
-        'res':  ' * '.join(map(str, res)),
-    })
+    response = {'id': id, 'number': number}
+    try:
+        number = int(number)
+        assert number > 1
+    except:
+        response.update({'res': 'Введите целое число большее 0'})
+    else:
+        res = await get_prime_factors(number)
+        response.update({'res':  ' * '.join(map(str, res))})
+
     query = (
         'HTTP/1.1 200 OK\r\n'
         'Content-type: text/json\r\n'
         '\r\n'
     ).encode('utf-8')
     writer.write(query)
-    writer.write(bytes(res, "utf8"))
+    writer.write(bytes(json.dumps(response), "utf8"))
     writer.close()
 
 
 if __name__ == '__main__':
-    logging.basicConfig(level=logging.DEBUG)
+    logging.basicConfig(level=logging.INFO)
     loop = asyncio.get_event_loop()
     server_gen = asyncio.start_server(handle, port=8081)
     server = loop.run_until_complete(server_gen)
