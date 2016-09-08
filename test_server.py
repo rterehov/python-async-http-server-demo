@@ -104,7 +104,6 @@ class TestCase:
                                           list(map(int, factors[i].split()))))
 
 
-
 class TestServerCase:
     def test__get_server_answer(self):
         """
@@ -117,7 +116,7 @@ class TestServerCase:
 
     def test__server_post_restriction(self):
         res = requests.post('http://127.0.0.1:8081')
-        assert res.status_code == 404 
+        assert res.status_code == 404
 
     def test__post_server_answer(self):
         """
