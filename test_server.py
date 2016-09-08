@@ -1,4 +1,9 @@
+import pytest
 import asyncio
+import socket as s
+import requests
+import json
+import random
 
 from server import is_prime, get_prime_factors
 
@@ -97,3 +102,33 @@ class TestCase:
                                       (i for i in factors),
                                       lambda i:
                                           list(map(int, factors[i].split()))))
+
+
+
+class TestServerCase:
+    def test__get_server_answer(self):
+        """
+        Проверяем, что сервер отвечает на GET
+
+        """
+        req = requests.get('http://127.0.0.1:8081')
+        assert req.status_code == 200
+        assert '<html>' in req.text
+
+    def test__post_server_answer(self):
+        """
+        Проверяем, основную функциональность
+
+        """
+        for i in factors:
+            id = random.randint(10000000, 10000000000)
+            res = requests.post('http://127.0.0.1:8081',
+                                {'number': i, 'id': id}).json()
+            expected_res = ' * '.join(factors[i].split())
+            print(i, res, expected_res)
+            assert int(res['number']) == i
+            assert int(res['id']) == id
+            if i == 0:
+                assert res['res'] == 'Введите целое число большее 0'
+            else:
+                assert res['res'] == expected_res

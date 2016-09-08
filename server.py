@@ -3,6 +3,7 @@ import json
 import asyncio
 import logging
 
+from urllib.parse import parse_qs
 from math import sqrt
 from os import curdir, sep
 
@@ -119,6 +120,8 @@ async def handle(reader, writer):
     Работает с запросами в объеме, достаточном для демонстрации.
 
     """
+    id = None
+    number = None
     first_line = True
     content_length = 0
     curr_func, args = reader.readline, ()
@@ -139,8 +142,10 @@ async def handle(reader, writer):
                     return static_serve(path, writer)
 
             if curr_func == reader.read:
-                number, id = map(lambda x: x.split('=')[-1], line.split('&'))
-                logging.info(line)
+                qs = parse_qs(line)
+                number = qs.get('number', [])[0]
+                id = qs.get('id', [])[0]
+                logging.info('{} - {}/{}'.format(line, number, id))
                 reader.feed_eof()
                 continue
 
@@ -153,23 +158,25 @@ async def handle(reader, writer):
             logging.warning('TIMEOUT!!!')
             break
 
-    response = {'id': id, 'number': number}
-    try:
-        number = int(number)
-        assert number > 0
-    except:
-        response.update({'res': 'Введите целое число большее 0'})
-    else:
-        res = await get_prime_factors(number)
-        response.update({'res':  ' * '.join(map(str, res))})
+    if id and number:
+        response = {'id': id, 'number': number}
+        try:
+            number = int(number)
+            assert number > 0
+        except:
+            response.update({'res': 'Введите целое число большее 0'})
+        else:
+            res = await get_prime_factors(number)
+            response.update({'res':  ' * '.join(map(str, res))})
 
-    query = (
-        'HTTP/1.1 200 OK\r\n'
-        'Content-type: text/json\r\n'
-        '\r\n'
-    ).encode('utf-8')
-    writer.write(query)
-    writer.write(bytes(json.dumps(response), "utf8"))
+        query = (
+            'HTTP/1.1 200 OK\r\n'
+            'Content-type: text/json\r\n'
+            '\r\n'
+        ).encode('utf-8')
+        writer.write(query)
+        writer.write(bytes(json.dumps(response), "utf8"))
+
     writer.close()
 
 
