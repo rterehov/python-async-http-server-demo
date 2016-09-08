@@ -111,9 +111,13 @@ class TestServerCase:
         Проверяем, что сервер отвечает на GET
 
         """
-        req = requests.get('http://127.0.0.1:8081')
-        assert req.status_code == 200
-        assert '<html>' in req.text
+        res = requests.get('http://127.0.0.1:8081')
+        assert res.status_code == 200
+        assert '<html>' in res.text
+
+    def test__server_post_restriction(self):
+        res = requests.post('http://127.0.0.1:8081')
+        assert res.status_code == 404 
 
     def test__post_server_answer(self):
         """
@@ -122,8 +126,8 @@ class TestServerCase:
         """
         for i in factors:
             id = random.randint(10000000, 10000000000)
-            res = requests.post('http://127.0.0.1:8081',
-                                {'number': i, 'id': id}).json()
+            res = requests.get('http://127.0.0.1:8081/?number={}&id={}'
+                               .format(i, id)).json()
             expected_res = ' * '.join(factors[i].split())
             print(i, res, expected_res)
             assert int(res['number']) == i
