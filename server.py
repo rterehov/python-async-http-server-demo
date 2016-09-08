@@ -3,7 +3,7 @@ import json
 import asyncio
 import logging
 
-from urllib.parse import parse_qs
+from urllib import parse
 from math import sqrt
 from os import curdir, sep
 
@@ -74,8 +74,28 @@ async def get_prime_factors(number):
     results[number] = res
     return res
 
+async def errors_handler(writer, code, message):
+    query = 'HTTP/1.1 {} \'{}\'\r\n\r\n'.format(code, message)
+    writer.write(query.encode('utf-8'))
+    writer.close()
 
-def static_serve(path, writer):
+async def handler_404(writer):
+    return await errors_handler(writer, 404, 'File not found')
+
+async def handler_408(writer):
+    return await errors_handler(writer, 408, 'Request Timeout')
+
+async def send_json(writer, data):
+    query = (
+        'HTTP/1.1 200 OK\r\n'
+        'Content-type: text/json\r\n'
+        '\r\n'
+    ).encode('utf-8')
+    writer.write(query)
+    writer.write(bytes(json.dumps(data), "utf8"))
+    writer.close()
+
+async def static_serve(path, writer):
     """
     Простой обработчик статики. Нужен для удобства демонстрации.
     Поддерживает js и html файлы.
@@ -98,10 +118,7 @@ def static_serve(path, writer):
             '\r\n'
         ).encode('utf-8')
     else:
-        query = (
-            'HTTP/1.1 404 \'File not found\'\r\n'
-            '\r\n'
-        ).encode('utf-8')
+        return await handler_404(writer)
 
     writer.write(query)
 
@@ -115,69 +132,56 @@ def static_serve(path, writer):
 
 async def handle(reader, writer):
     """
-    Асинхронный обработчик соединений.
-
+    Обработчик соединений.
     Работает с запросами в объеме, достаточном для демонстрации.
 
     """
     id = None
     number = None
-    first_line = True
     content_length = 0
-    curr_func, args = reader.readline, ()
 
-    while not reader.at_eof():
-        try:
-            data = await asyncio.wait_for(curr_func(*args), timeout=0.3)
-            if not data:
-                reader.feed_eof()
-                continue
+    # Для наших целей достаточно прочитать первую строку.
+    try:
+        data = await asyncio.wait_for(reader.readline(), timeout=1)
+    except concurrent.futures.TimeoutError:
+        logging.warning('TIMEOUT!!!')
+        return await handler_408(writer)
+    finally:
+        reader.feed_eof()
 
-            line = data.decode()
-            if first_line:
-                first_line = False
-                method, path, _ = line.split()
-                if method == 'GET':
-                    path = 'index.html' if path == '/' else path
-                    return static_serve(path, writer)
+    line = data.decode()
+    logging.info(line)
 
-            if curr_func == reader.read:
-                qs = parse_qs(line)
-                number = qs.get('number', [])[0]
-                id = qs.get('id', [])[0]
-                logging.info('{} - {}/{}'.format(line, number, id))
-                reader.feed_eof()
-                continue
+    # Разрешаем только GET запросы
+    method, url, _ = line.split()
+    if method == 'POST':
+        return await handler_404(writer)
 
-            if line.startswith('Content-Length'):
-                content_length = int(line.split(':')[-1].strip())
-            elif line == '\r\n':
-                curr_func, args = reader.read, (content_length,)
+    # Парсим запрос и вычленяем нужные параметры
+    _, _, path, _, query, _ = parse.urlparse(url)
+    if query:
+        qs = parse.parse_qs(query)
+        number = qs.get('number', [])[0]
+        id = qs.get('id', [])[0]
 
-        except concurrent.futures.TimeoutError:
-            logging.warning('TIMEOUT!!!')
-            break
+    # Если нужных параметров нет, считаем, что запросили статику
+    if not all((number, id)):
+        path = 'index.html' if path == '/' else path
+        return await static_serve(path, writer)
 
-    if id and number:
-        response = {'id': id, 'number': number}
-        try:
-            number = int(number)
-            assert number > 0
-        except:
-            response.update({'res': 'Введите целое число большее 0'})
-        else:
-            res = await get_prime_factors(number)
-            response.update({'res':  ' * '.join(map(str, res))})
+    # Проверка входящих данных, расчет и формирование тела ответа
+    response = {'id': id, 'number': number}
+    try:
+        number = int(number)
+        assert number > 0
+    except:
+        response.update({'res': 'Введите целое число большее 0'})
+    else:
+        res = await get_prime_factors(number)
+        response.update({'res':  ' * '.join(map(str, res))})
 
-        query = (
-            'HTTP/1.1 200 OK\r\n'
-            'Content-type: text/json\r\n'
-            '\r\n'
-        ).encode('utf-8')
-        writer.write(query)
-        writer.write(bytes(json.dumps(response), "utf8"))
-
-    writer.close()
+    # Отправляем ответ
+    return await send_json(writer, response)
 
 
 if __name__ == '__main__':

@@ -17,9 +17,8 @@
             var id = Math.round(Math.random() * (1000000000 - 1000000) + 1000000);
             $("#res").append("<div>" + number + " = <span id='res-" + id +"'>ждите...</span></div>");
             $.ajax({
-                type: 'POST',
-                url: 'http://127.0.0.1:8081/post',
-                data: "number=" + number + "&id=" + id,
+                type: 'GET',
+                url: 'http://127.0.0.1:8081?number=' + number + '&id=' + id,
             }).done(function(data){
                 // console.log(data);
                 $("#res-" + data.id).html(data.res);
