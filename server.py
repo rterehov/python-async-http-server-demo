@@ -154,7 +154,7 @@ async def handle(reader, writer):
 
     # Разрешаем только GET запросы
     method, url, _ = line.split()
-    if method == 'POST':
+    if method != 'GET':
         return await handler_404(writer)
 
     # Парсим запрос и вычленяем нужные параметры
